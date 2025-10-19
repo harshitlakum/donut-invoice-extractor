@@ -1,64 +1,124 @@
-Donut Invoice Extractor — Showcase
+# donut-invoice-extractor
 
-OCR-free invoice extraction using Donut (Swin encoder + seq2seq decoder).
-This repo ships with a polished synthetic HTML demo you can generate in ~60 seconds (no training), plus optional code to train, evaluate, export, and serve an API.
+OCR-free invoice extraction using **Donut** (Swin encoder + seq2seq decoder).  
+This repo ships with a polished **synthetic HTML demo** you can generate in ~60 seconds (no training), plus optional code to **serve an API**, **train**, **evaluate**, and **export to TorchScript**.
 
-⸻
+---
 
-✨ What’s inside
-	•	Synthetic showcase generator → single-file HTML gallery with invoices, fields, line-items, and Donut-style linearized targets.
-	•	Minimal dataset loader (JSONL with image, fields, line_items, target).
-	•	FastAPI inference API (optional).
-	•	Lightweight trainer (optional).
-	•	Evaluator with Hungarian matching for line-items (optional).
-	•	TorchScript exporter (optional).
-	•	Tiny CI and a unit test.
+## ✨ Highlights
 
-⸻
+- **1-Minute Synthetic Showcase** → single-file HTML gallery with invoices, fields, line-items, and Donut-style linearized targets (no training).
+- **Minimal dataset loader** → JSONL with `{image, fields, line_items, target}`.
+- **Optional FastAPI** inference server.
+- **Lightweight trainer** (Donut finetune).
+- **Evaluator** with Hungarian matching for line-items.
+- **TorchScript exporter**.
+- **CI + tiny unit test** (sanity).
 
-🚀 1-Minute Demo (no training)
+---
 
-# 1) Setup (Python 3.10+)
-python -m venv .venv && source .venv/bin/activate
+## 🧰 Tech Stack
+
+- Python · PyTorch · Hugging Face Transformers  
+- FastAPI · Uvicorn  
+- Pillow · SciPy · tqdm
+
+---
+
+## 🚀 Quick Start (Demo in ~1 minute)
+
+> Python **3.10+** recommended.
+
+### 1) Setup
+```bash
+python -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
+````
 
-# 2) Generate a synthetic dataset (images + JSONL)
+### 2) Generate a synthetic dataset (images + JSONL)
+
+```bash
 python -m src.tools.gen_synth_invoices --n 24 --out data/converted_synth
+```
 
-# 3) Build the HTML gallery (single file with embedded images)
+### 3) Build the HTML gallery (single file with embedded images)
+
+```bash
 python -m src.tools.make_html_demo \
   --pred_jsonl data/converted_synth/val.jsonl \
   --out out/invoice_demo_synth.html \
   --title "Invoice Extraction — Synthetic Showcase"
+```
 
-# 4) Open (macOS)
+### 4) Open (macOS) or serve locally
+
+```bash
 open out/invoice_demo_synth.html
-# or view via http://localhost:8000/out/invoice_demo_synth.html
+# or
 python -m http.server 8000
+# then visit: http://localhost:8000/out/invoice_demo_synth.html
+```
 
-The HTML shows: vendor / date / total, a line-item table, and the Donut-style linearized text under each card. Perfect for a portfolio or walkthrough.
+The HTML shows: **vendor / date / total**, a **line-item** table, and the **Donut-style linearized** text under each card.
+Perfect for a **portfolio** or **walkthrough**.
 
-⸻
+---
 
-📦 Optional: Use the API (with any Donut checkpoint)
+## 🗂️ Project Structure
 
-# Serve
-MODEL_PATH=checkpoints/donut-synth/best \
+```
+src/
+  api/main.py               # FastAPI server
+  data/ds_jsonl.py          # JSONL dataset (image + target | fields + line_items)
+  eval/invoice_eval.py      # metrics & Hungarian matching
+  export/torchscript.py     # TorchScript exporter
+  train_donut_fast.py       # lightweight trainer
+  tools/gen_synth_invoices.py
+  tools/make_html_demo.py
+
+configs/
+scripts/
+  make_synth_showcase.sh    # one-shot demo builder
+
+tests/
+  test_linearize.py         # tiny sanity test
+
+data/
+out/
+```
+
+---
+
+## 📦 Optional: Run the API (with any Donut checkpoint)
+
+**Serve**
+
+```bash
+# Example paths; adjust to your checkpoint directories.
+export MODEL_PATH="checkpoints/donut-synth/best"
 uvicorn src.api.main:app --host 0.0.0.0 --port 8000
+```
 
-# Call
+**Call**
+
+```bash
 curl -F "file=@data/converted_synth/images/synth_00000.png" \
-     http://localhost:8000/extract
+  http://localhost:8000/extract
+```
 
-	•	Endpoint: POST /extract → {vendor, date, total, line_items, raw}
-	•	Health: GET /healthz
+**Endpoints**
 
-⸻
+* `GET /healthz`
+* `POST /extract` → `{ vendor, date, total, line_items, raw }`
 
-🧪 Optional: Train on the synthetic set
+---
 
-Only if you want real model outputs; not required for the demo.
+## 🧪  Train 
 
+> Only if you want **real model outputs**; **not required** for the demo.
+
+```bash
 python -m src.train_donut_fast \
   --data_dir data/converted_synth \
   --processor checkpoints/processor \
@@ -66,97 +126,106 @@ python -m src.train_donut_fast \
   --base_model naver-clova-ix/donut-base \
   --epochs 1 --bsz 1 --grad_accum 8 \
   --max_length 512 --image_size 832 --warmup 50
+```
 
+---
 
-⸻
+## 📊  Evaluate predictions
 
-📊 Optional: Evaluate predictions
-
+```bash
 python -m src.eval.invoice_eval \
   --ref_jsonl data/converted_synth/val.jsonl \
   --pred_jsonl out/preds.jsonl \
   --out out/metrics.json
 
 cat out/metrics.json
+```
 
-	•	Fields: vendor/date/total accuracy (normalized).
-	•	Line-items: row-level P/R/F1 via Hungarian matching.
+* **Fields**: vendor/date/total accuracy (normalized).
+* **Line-items**: row-level P/R/F1 via **Hungarian matching**.
 
-⸻
+---
 
-📤 Optional: Export to TorchScript
+## 📤 Export to TorchScript
 
+```bash
 python -m src.export.torchscript \
   --ckpt checkpoints/donut-synth/best \
   --out exports/ts \
   --img 960
+
 # → exports/ts/donut_ts.pt
+```
 
+---
 
-⸻
+## 📚 Data (how to get it)
 
-🗂️ Project structure
+You can demo the project with **synthetic data** (no external downloads), or pull public datasets we referenced.
+**Respect each dataset’s license/terms.**
 
-src/
-  api/main.py                 # FastAPI server
-  data/ds_jsonl.py            # JSONL dataset (image + target | fields + line_items)
-  eval/invoice_eval.py        # metrics & Hungarian matching
-  export/torchscript.py       # TorchScript exporter
-  train_donut_fast.py         # lightweight trainer 
+### A) Synthetic invoices (used for the showcase) — default path
 
-configs/
-scripts/
-  make_synth_showcase.sh      # one-shot demo builder
-tests/
-  test_linearize.py           # tiny sanity test
-
-data
- 
-⸻
-
-📚 Data (how to get it)
-
-You can demo the project with synthetic data (no external downloads), or pull public datasets we referenced.
-
-1) Synthetic invoices (used for the showcase)
-
-No external data. We render invoices + ground-truth JSON ourselves.
-
+```bash
 python -m src.tools.gen_synth_invoices --n 24 --out data/converted_synth
+
 python -m src.tools.make_html_demo \
   --pred_jsonl data/converted_synth/val.jsonl \
   --out out/invoice_demo_synth.html \
   --title "Invoice Extraction — Synthetic Showcase"
+```
 
-2) DocILE (Invoices/POs; KILE + LIR annotations)
-    •    Site: https://docile.rossum.ai/
-    •    Access is token-gated. Use the personal token you receive via email.
+### B) DocILE (Invoices/POs; KILE + LIR annotations)
 
-Download method we used:
+* Site: [https://docile.rossum.ai/](https://docile.rossum.ai/)
+* **Access** is token-gated. Request access and receive your **personal token** via email.
 
-# replace with your FULL token (30–40 chars)
-TOKEN='cbbd81af...full_token_here...'
-./download_dataset.sh "$TOKEN" annotated-trainval data/docile --unzip
-./download_dataset.sh "$TOKEN" test               data/docile --unzip
+**Safe usage pattern (no token leaks):**
 
-# quick sanity check (should NOT return 403/404)
-curl -I "https://docile-dataset-rossum.s3.eu-west-1.amazonaws.com/$TOKEN/annotated-trainval.zip"
+1. Create a `.env` file (never commit it):
 
-3) SROIE (receipts; vendor/date/total)
-    •    Kaggle: https://www.kaggle.com/datasets/urbikn/sroie-datasetv2
-Download (requires Kaggle CLI + API token):
+   ```bash
+   echo "DOCILE_TOKEN=your_personal_token_here" > .env
+   ```
+2. Add `.env` to `.gitignore`:
 
-kaggle datasets download -d urbikn/sroie-datasetv2 -p data/sroie
-unzip data/sroie/sroie-datasetv2.zip -d data/sroie
+   ```bash
+   echo ".env" >> .gitignore
+   ```
+3. Use the token from the environment:
 
-4) RVL-CDIP (document classification; we sample “invoice” pages)
-    •    Info: http://www.cs.cmu.edu/~aharley/rvl-cdip/ (mirror: https://adamharley.com/rvl-cdip/)
-Access requires agreeing to the dataset terms (request/approval). After download, filter to invoice class and (optionally) annotate fields/line-items for supervision.
+   ```bash
+   source .env
+   ./download_dataset.sh "$DOCILE_TOKEN" annotated-trainval data/docile --unzip
+   ./download_dataset.sh "$DOCILE_TOKEN" test             data/docile --unzip
+   ```
+4. Quick sanity check:
 
-⸻
+   ```bash
+   curl -I "https://docile-dataset-rossum.s3.eu-west-1.amazonaws.com/${DOCILE_TOKEN}/annotated-trainval.zip"
+   ```
 
-Folder expectations
+**Do not** paste real tokens in code, examples, issues, or commit history.
 
+### C) SROIE (receipts; vendor/date/total)
+
+* Kaggle: [https://www.kaggle.com/datasets/urbikn/sroie-datasetv2](https://www.kaggle.com/datasets/urbikn/sroie-datasetv2)
+* Download (requires Kaggle CLI + API token):
+
+  ```bash
+  kaggle datasets download -d urbikn/sroie-datasetv2 -p data/sroie
+  unzip data/sroie/sroie-datasetv2.zip -d data/sroie
+  ```
+
+### D) RVL-CDIP (document classification; sample “invoice” pages)
+
+* Info: [http://www.cs.cmu.edu/~aharley/rvl-cdip/](http://www.cs.cmu.edu/~aharley/rvl-cdip/) (mirror: [https://adamharley.com/rvl-cdip/](https://adamharley.com/rvl-cdip/))
+* Access typically requires agreeing to dataset terms (request/approval).
+* After download, filter to invoice class and (optionally) annotate fields/line-items for supervision.
+
+**Folder expectations**
+
+```
 data/
   converted_synth/            # synthetic (images + train/val/test .jsonl with target)
   docile/                     # if you downloaded DocILE
@@ -164,46 +233,61 @@ data/
     train.json val.json test.json trainval.json
 out/
   invoice_demo_synth.html     # generated demo page
-
-⚠️ Respect each dataset’s license/terms. Synthetic data here is generated locally and free to use for demos.                        
-
+```
 
 
-⸻
+---
 
-🔧 Troubleshooting
-	•	HTML doesn’t open: ensure the path is out/invoice_demo_synth.html.
-	•	Images missing in HTML: make_html_demo embeds base64 from the image path in the JSONL; verify those files exist.
-	•	macOS font warnings: the generator falls back to PIL’s default font automatically.
+## 🔧 Troubleshooting
 
-⸻
+* **HTML doesn’t open** → ensure the path is `out/invoice_demo_synth.html`.
+* **Images missing in HTML** → `make_html_demo` embeds base64 from paths in the JSONL; verify those image files exist.
+* **macOS font warnings** → synthetic generator falls back to PIL’s default font automatically.
+* **CUDA not found** → set `CUDA_VISIBLE_DEVICES=''` to force CPU or install proper CUDA drivers.
+* **Tokenizer length errors** → try `--max_length 512` and keep image `--image_size` at 832/960.
 
-🧰 Requirements
+---
 
-See requirements.txt. Key libs: torch, transformers, fastapi, Pillow, scipy, tqdm.
+## 🤝 Contributing
 
-⸻
+1. Fork the repo
+2. Create a feature branch: `git checkout -b feat/my-improvement`
+3. Add tests where sensible (`tests/`)
+4. Run lint/test
+5. Open a PR with a clear description and before/after results
 
-☁️ Push to GitHub
+---
 
-git init
-git add -A
-git commit -m "feat: initial invoice-extractor showcase"
-git branch -M main
-# create an empty GitHub repo, then:
-git remote add origin git@github.com:YOURUSER/invoice-extractor.git
-git push -u origin main
+## 🗺️ Roadmap / TODO
 
+* [ ] Add multi-page invoice stitching for HTML demo
+* [ ] Plug-and-play Donut checkpoints via config
+* [ ] Expand evaluator (edit distance on linearized targets)
+* [ ] Dockerfile + Compose for API
+* [ ] Demo notebook (Colab)
+* [ ] More fonts/templates for synthetic generator
 
-⸻
+---
 
-⚖️ License
+## ⚖️ License
 
-MIT — see LICENSE.
+**MIT** — see `LICENSE`.
 
-⸻
+---
 
-🙋 FAQ
+## 🔒 Security & Ethical Use Notice
 
-Q: Are we generating images from text?
-A: No — the demo renders synthetic invoice images and shows the structured fields + linearized tags. The (optional) model performs image → text/JSON extraction.
+This repository **does not distribute** any private or paid datasets.
+Users **must** respect licenses and access terms for third-party datasets (e.g., **DocILE**, **RVL-CDIP**, **SROIE**).
+
+* **Never** commit tokens, API keys, or private dataset links to Git history.
+* Use environment variables (e.g., `.env`) and ensure `.env` is listed in `.gitignore`.
+* If you discover a potential security or license issue, please open a minimal issue without sharing secrets.
+
+---
+
+## 👤 Maintainer
+
+**Owner:** Harshit Lakum
+**Contact:** harshitlakum2012 [at] gmail [dot] com
+
